@@ -1,0 +1,146 @@
+#!/usr/bin/env bpftrace
+/*
+ * cpu_cache_affinity_wait.bt
+ *
+ * Trace CPU affinity wait and cache-warmth migration delays on Linux.
+ * Measures the histogram of time tasks spend in RUNNABLE state while
+ * target CPUs were idle, but migration was rejected due to:
+ *   1) Cache Warmth (task_hot() returning true, delta < sched_migration_cost_ns)
+ *   2) Hard CPU Affinity constraints (task->cpus_ptr restricting migration)
+ *
+ * Usage:
+ *   sudo bpftrace cpu_cache_affinity_wait.bt
+ *
+ * Copyright (c) 2026 Senior Kernel & eBPF Performance Engineer
+ */
+
+#include <linux/sched.h>
+
+BEGIN
+{
+  printf("Tracing CPU Cache-Warmth & Affinity Migration Waits... Hit Ctrl-C to end.\n");
+  printf("Targeting kernel load-balancer decision points (can_migrate_task)...\n\n");
+}
+
+/*
+ * Hook fexit:can_migrate_task
+ * Prototype: int can_migrate_task(struct task_struct *p, struct lb_env *env)
+ * fexit probes in bpftrace provide direct access to input parameters (args.p, args.env)
+ * as well as the function return value via the built-in 'retval' keyword.
+ */
+fexit:can_migrate_task
+{
+  $p = (struct task_struct *)args.p;
+  $env = (struct lb_env *)args.env;
+  $retval = retval;
+
+  if ($p == 0 || $env == 0) {
+    return;
+  }
+
+  $pid = $p->pid;
+  if ($pid == 0) {
+    return;
+  }
+
+  $idle_type = (uint32)$env->idle; /* 1 = CPU_IDLE, 2 = CPU_NEWLY_IDLE, 0 = __CPU_NOT_IDLE */
+
+  /* If migration was REJECTED (retval == 0) AND target CPU was IDLE (idle_type != 0) */
+  if ($retval == 0 && $idle_type != 0) {
+    $dst_cpu_id = (uint64)$env->dst_cpu;
+    $word_idx = $dst_cpu_id / 64;
+    $bit_offset = $dst_cpu_id % 64;
+    $mask = (uint64)1 << $bit_offset;
+
+    /* Read cpumask bitmask using pointer arithmetic to support dynamic indexing */
+    $cpus_bits_ptr = (uint64 *)$p->cpus_ptr;
+    $allowed_bits = *($cpus_bits_ptr + $word_idx);
+    $comm = $p->comm;
+
+    if (($allowed_bits & $mask) == 0) {
+      /* Rejection due to CPU Affinity constraint */
+      @denied_affinity_count[$comm]++;
+      if (@affinity_wait_start[$pid] == 0) {
+        @affinity_wait_start[$pid] = nsecs;
+      }
+    } else {
+      /* Rejection due to Cache Warmth (task_hot() evaluated true) */
+      @denied_cache_warm_count[$comm]++;
+      if (@cache_warm_wait_start[$pid] == 0) {
+        @cache_warm_wait_start[$pid] = nsecs;
+      }
+    }
+  }
+}
+
+/*
+ * Hook sched:sched_switch tracepoint
+ * Fires when next task is scheduled on a CPU.
+ */
+tracepoint:sched:sched_switch
+{
+  $next_pid = args.next_pid;
+
+  /* Check if next_pid suffered Cache-Warmth migration wait */
+  $cache_start = @cache_warm_wait_start[$next_pid];
+  if ($cache_start > 0) {
+    $delta_us = (nsecs - $cache_start) / 1000;
+    @cache_warm_wait_latency_us = hist($delta_us);
+    @cache_warm_wait_by_process[args.next_comm] = hist($delta_us);
+    delete(@cache_warm_wait_start[$next_pid]);
+  }
+
+  /* Check if next_pid suffered CPU Affinity migration wait */
+  $aff_start = @affinity_wait_start[$next_pid];
+  if ($aff_start > 0) {
+    $delta_us = (nsecs - $aff_start) / 1000;
+    @affinity_wait_latency_us = hist($delta_us);
+    @affinity_wait_by_process[args.next_comm] = hist($delta_us);
+    delete(@affinity_wait_start[$next_pid]);
+  }
+}
+
+/* Cleanup on process termination */
+tracepoint:sched:sched_process_exit
+{
+  $pid = args.pid;
+  delete(@cache_warm_wait_start[$pid]);
+  delete(@affinity_wait_start[$pid]);
+}
+
+END
+{
+  printf("\n===================================================================\n");
+  printf("              CPU MIGRATION WAIT PERFORMANCE REPORT               \n");
+  printf("===================================================================\n\n");
+
+  printf("--- Total Migration Rejections to Idle CPUs by Process ---\n");
+  printf("Cache Warmth Rejections (@denied_cache_warm_count):\n");
+  print(@denied_cache_warm_count);
+
+  printf("\nCPU Affinity Rejections (@denied_affinity_count):\n");
+  print(@denied_affinity_count);
+
+  printf("\n--- Cache-Warmth Runnable Wait Latency Histogram (microseconds) ---\n");
+  print(@cache_warm_wait_latency_us);
+
+  printf("\n--- CPU Affinity Runnable Wait Latency Histogram (microseconds) ---\n");
+  print(@affinity_wait_latency_us);
+
+  printf("\n--- Breakdown by Process ---\n");
+  printf("Cache-Warmth Wait by Process:\n");
+  print(@cache_warm_wait_by_process);
+
+  printf("\nCPU Affinity Wait by Process:\n");
+  print(@affinity_wait_by_process);
+
+  /* Clear maps */
+  clear(@denied_cache_warm_count);
+  clear(@denied_affinity_count);
+  clear(@cache_warm_wait_latency_us);
+  clear(@affinity_wait_latency_us);
+  clear(@cache_warm_wait_by_process);
+  clear(@affinity_wait_by_process);
+  clear(@cache_warm_wait_start);
+  clear(@affinity_wait_start);
+}
