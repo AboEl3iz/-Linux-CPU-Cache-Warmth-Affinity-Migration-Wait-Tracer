@@ -5,7 +5,16 @@
 
 set -e
 
-VERSION="${1:-1.0.0}"
+RAW_VERSION="${1:-1.0.0}"
+VERSION="${RAW_VERSION#v}"
+
+# Debian and RPM package specs require version to start with a digit
+if [[ ! "${VERSION}" =~ ^[0-9] ]]; then
+    VERSION="1.0.0-${VERSION}"
+fi
+
+RPM_VERSION="${VERSION//-/.}"
+
 ARCH="${2:-all}"
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="${PROJECT_ROOT}/dist"
@@ -105,7 +114,7 @@ if command -v rpmbuild >/dev/null 2>&1; then
     
     cat << EOF > "${RPM_TOPDIR}/SPECS/cpu-cache-affinity-wait.spec"
 Name:           cpu-cache-affinity-wait
-Version:        ${VERSION}
+Version:        ${RPM_VERSION}
 Release:        1%{?dist}
 Summary:        Trace CPU affinity wait and cache-warmth migration latency
 License:        MIT
