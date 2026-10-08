@@ -6,7 +6,16 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BT_SCRIPT="${SCRIPT_DIR}/cpu_cache_affinity_wait.bt"
+
+if [[ -f "${SCRIPT_DIR}/cpu_cache_affinity_wait.bt" ]]; then
+    BT_SCRIPT="${SCRIPT_DIR}/cpu_cache_affinity_wait.bt"
+elif [[ -f "/usr/share/cpu-cache-affinity-wait/cpu_cache_affinity_wait.bt" ]]; then
+    BT_SCRIPT="/usr/share/cpu-cache-affinity-wait/cpu_cache_affinity_wait.bt"
+elif [[ -f "/usr/local/share/cpu-cache-affinity-wait/cpu_cache_affinity_wait.bt" ]]; then
+    BT_SCRIPT="/usr/local/share/cpu-cache-affinity-wait/cpu_cache_affinity_wait.bt"
+else
+    BT_SCRIPT="${SCRIPT_DIR}/cpu_cache_affinity_wait.bt"
+fi
 
 PID_FILTER=""
 COMM_FILTER=""
