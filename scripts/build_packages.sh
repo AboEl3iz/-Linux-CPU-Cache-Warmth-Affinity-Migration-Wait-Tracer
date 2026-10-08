@@ -137,7 +137,7 @@ install -m 644 ${PROJECT_ROOT}/cpu_cache_affinity_wait.bt %{buildroot}/usr/share
 EOF
 
     rpmbuild --define "_topdir ${RPM_TOPDIR}" -bb "${RPM_TOPDIR}/SPECS/cpu-cache-affinity-wait.spec"
-    cp "${RPM_TOPDIR}"/RPMS/*/*.rpm "${DIST_DIR}/" || true
+    find "${RPM_TOPDIR}/RPMS" -name "*.rpm" -exec cp {} "${DIST_DIR}/" \; 2>/dev/null || true
     echo "  -> Created RPM package in ${DIST_DIR}"
 elif command -v fpm >/dev/null 2>&1; then
     fpm -s dir -t rpm -n cpu-cache-affinity-wait -v "${VERSION}" \
@@ -145,7 +145,7 @@ elif command -v fpm >/dev/null 2>&1; then
         -d "bpftrace" \
         "${PROJECT_ROOT}/cpu_cache_affinity_wait.sh=/usr/bin/cpu_cache_affinity_wait.sh" \
         "${PROJECT_ROOT}/cpu_cache_affinity_wait.bt=/usr/share/cpu-cache-affinity-wait/cpu_cache_affinity_wait.bt"
-    mv *.rpm "${DIST_DIR}/" 2>/dev/null || true
+    find . -maxdepth 1 -name "*.rpm" -exec mv {} "${DIST_DIR}/" \; 2>/dev/null || true
     echo "  -> Created RPM package via fpm in ${DIST_DIR}"
 else
     echo "  -> Note: rpmbuild or fpm not found locally. RPM packaging will run in CI."
