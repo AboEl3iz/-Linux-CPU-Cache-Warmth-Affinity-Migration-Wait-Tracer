@@ -19,9 +19,7 @@ In modern multi-core, SMP, and NUMA Linux architectures, CPU cores often sit idl
 
 The Linux kernel Completely Fair Scheduler (CFS) load balancer (`can_migrate_task`) rejects task migration to idle cores for two main reasons:
 
-1. **Cache Warmth Rejection (`task_hot()`)**: The task ran on its current CPU very recently 
-($\Delta t < \text{sysctl\_sched\_migration\_cost}$).
- Migrating it would invalidate CPU L1/L2/L3 cache lines, resulting in a net performance loss.
+1. **Cache Warmth Rejection (`task_hot()`)**: The task ran on its current CPU very recently. Migrating it would invalidate CPU L1/L2/L3 cache lines, resulting in a net performance loss.
 2. **Hard CPU Affinity Restriction**: The task's affinity mask (`p->cpus_ptr`) restricts it from running on the available idle CPU core.
 
 This toolhooks into the kernel's scheduler decision path using eBPF `fexit` and `tracepoint` probes to calculate the exact latency impact of these restrictions.
