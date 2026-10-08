@@ -11,7 +11,7 @@ Specifically, **`cpu_cache_affinity_wait`** measures and categorizes the exact d
 
 ---
 
-## 📌 Problem Overview
+##  Problem Overview
 
 In modern multi-core, SMP, and NUMA Linux architectures, CPU cores often sit idle while tasks wait in runqueues (`RUNNABLE` state). System administrators and performance engineers frequently ask:
 
@@ -19,14 +19,16 @@ In modern multi-core, SMP, and NUMA Linux architectures, CPU cores often sit idl
 
 The Linux kernel Completely Fair Scheduler (CFS) load balancer (`can_migrate_task`) rejects task migration to idle cores for two main reasons:
 
-1. **Cache Warmth Rejection (`task_hot()`)**: The task ran on its current CPU very recently ($\Delta t < \text{sysctl\_sched\_migration\_cost}$). Migrating it would invalidate CPU L1/L2/L3 cache lines, resulting in a net performance loss.
+1. **Cache Warmth Rejection (`task_hot()`)**: The task ran on its current CPU very recently 
+($\Delta t < \text{sysctl\_sched\_migration\_cost}$).
+ Migrating it would invalidate CPU L1/L2/L3 cache lines, resulting in a net performance loss.
 2. **Hard CPU Affinity Restriction**: The task's affinity mask (`p->cpus_ptr`) restricts it from running on the available idle CPU core.
 
 This toolhooks into the kernel's scheduler decision path using eBPF `fexit` and `tracepoint` probes to calculate the exact latency impact of these restrictions.
 
 ---
 
-## 🏗 Kernel Decision Logic & Workflow
+##  Kernel Decision Logic & Workflow
 
 ```
 [ Task Runnable on CPU A ] ──> [ Load Balancer (CPU B is Idle) ]
@@ -44,7 +46,7 @@ This toolhooks into the kernel's scheduler decision path using eBPF `fexit` and 
 
 ---
 
-## 🚀 Features
+##  Features
 
 - **Zero-Overhead Kernel Instrumentation**: Uses eBPF `fexit:can_migrate_task` and `tracepoint:sched:sched_switch` for low overhead in production environments.
 - **Dual Cause Categorization**: Automatically separates delays caused by L1/L2/L3 cache protection (`task_hot`) from hard mask constraints (`cpus_ptr`).
@@ -54,7 +56,7 @@ This toolhooks into the kernel's scheduler decision path using eBPF `fexit` and 
 
 ---
 
-## 📋 Prerequisites
+##  Prerequisites
 
 - **OS**: Linux Kernel `5.4+` (with BTF enabled at `/sys/kernel/btf/vmlinux`) or Kernel headers installed.
 - **Tooling**: `bpftrace` ($\ge$ 0.12.0) and standard `bash` ($\ge$ 4.0).
@@ -62,7 +64,7 @@ This toolhooks into the kernel's scheduler decision path using eBPF `fexit` and 
 
 ---
 
-## 📦 Installation & Packaging
+##  Installation & Packaging
 
 ### Option 1: Debian / Ubuntu Package (`.deb`)
 
@@ -101,7 +103,7 @@ sudo make install
 
 ---
 
-## 💻 Usage
+##  Usage
 
 Once installed, you can invoke the tracer using either `cpu_cache_affinity_wait` or `cpu_cache_affinity_wait.sh`:
 
@@ -138,7 +140,7 @@ sudo cpu_cache_affinity_wait [OPTIONS]
 
 ---
 
-## 📊 Sample Output Report
+##  Sample Output Report
 
 ```text
 ===================================================================
@@ -171,7 +173,7 @@ CPU Affinity Rejections (@denied_affinity_count):
 
 ---
 
-## 🛠 Tuning & Actionable Remediation
+##  Tuning & Actionable Remediation
 
 If `cpu_cache_affinity_wait` highlights significant latency spikes:
 
@@ -191,7 +193,7 @@ If `cpu_cache_affinity_wait` highlights significant latency spikes:
 
 ---
 
-## ⚙️ CI / CD & Automated Packaging
+##  CI / CD & Automated Packaging
 
 This repository includes a fully automated GitHub Actions pipeline (`.github/workflows/ci.yml`) that:
 - Runs static analysis and shell script linting via `ShellCheck` & `bash -n`.
@@ -200,7 +202,7 @@ This repository includes a fully automated GitHub Actions pipeline (`.github/wor
 
 ---
 
-## 📄 License
+##  License
 
 Distributed under the [MIT License](LICENSE).
 EOF
